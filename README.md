@@ -8,6 +8,15 @@ Convert EiBi, Aoki, and HFCC radio schedules into a consistent, validated CSV fo
 - [Design](docs/design.md)
 - [CSV format](docs/format.md)
 
+## Getting started
+
+Install [uv](https://github.com/astral-sh/uv#installation), then run the tool directly from GitHub using Python 3.14:
+
+```sh
+uv tool run --python 3.14 \
+  --from git+https://github.com/esp32-si4732/radio-schedules.git@main \
+  rsked --help
+```
 
 ## Development checks
 
