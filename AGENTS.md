@@ -1,0 +1,9 @@
+- Keep code brief, simple, and readable; avoid overengineering.
+- Do not wrap long Markdown lines; keep each paragraph on a single line. Preserve the original formatting of LICENSE.md.
+- Read [docs/design.md](docs/design.md) before architectural changes.
+- Treat [docs/format.md](docs/format.md) as authoritative for output semantics.
+- Before changing a parser, inspect source documentation and actual files.
+- Add or update tests for new behavior, bug fixes, and meaningful edge cases. Keep tests focused on observable behavior rather than implementation details.
+- For behavior-preserving refactors, compare available sample outputs.
+- Run `uv run pytest`, `uv run ruff check .`, and `uv run ruff format --check .` after code changes.
+- Keep tests independent of live upstream services.
