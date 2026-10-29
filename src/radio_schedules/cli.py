@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from . import itu
+from .format import read
 
 
 def main(argv=None):
@@ -14,8 +15,14 @@ def main(argv=None):
     checks.add_parser(
         "itu", help="compare bundled ITU names with the current online table"
     )
-    parser.parse_args(argv)
+    validate = commands.add_parser("validate", help="validate a schedule CSV file")
+    validate.add_argument("file")
+    args = parser.parse_args(argv)
     try:
+        if args.command == "validate":
+            rows = read(args.file)
+            print(f"{args.file}: valid ({len(rows)} rows)")
+            return 0
         changes = itu.check()
         print(
             "\n".join(changes)

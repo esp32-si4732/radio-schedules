@@ -18,6 +18,14 @@ uv tool run --python 3.14 \
   rsked --help
 ```
 
+## Validate an existing export
+
+```sh
+uv run rsked validate schedule.csv
+```
+
+Validation accepts UTF-8 with or without an initial BOM and LF or CRLF line endings. Invalid fields, headers, or frequency ordering fail validation.
+
 ## Check ITU names for changes
 
 ```sh
