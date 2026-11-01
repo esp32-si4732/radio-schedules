@@ -18,13 +18,13 @@ The table gives the recommended order. Optional columns may be omitted. Maximum 
 | Column | Value | Empty/omitted | Max bytes |
 |---|---|---|---:|
 | `freq` | Positive kHz, up to 3 decimal places | Invalid | 11 |
+| `mode` | Mode/system abbreviation, e.g. `AM`, `USB`, `DRM`, `HFDL` | Unknown | 4 |
+| `station` | Station/service name | Invalid | 40 |
+| `language` | Readable language name(s), separated by `/` | Unknown | — |
 | `time` | UTC `HHMM-HHMM` | `0000-2400` | 9 |
 | `days` | Distinct ascending digits: `1`=Mon … `7`=Sun | Every day | 7 |
 | `from` | First broadcast-start date, `YYYY-MM-DD` | No lower limit | 10 |
 | `to` | Last broadcast-start date, `YYYY-MM-DD` | No upper limit | 10 |
-| `mode` | Mode/system abbreviation, e.g. `AM`, `USB`, `DRM`, `HFDL` | Unknown | 4 |
-| `station` | Station/service name | Invalid | 40 |
-| `language` | Readable language name(s), separated by `/` | Unknown | — |
 | `location` | Readable transmitter country, territory, or region name | Unknown | — |
 | `site` | Transmitter-site name | Unknown | — |
 | `lat` | Transmitter-site WGS 84 latitude, -90..90 decimal degrees | Unknown | 12 |
@@ -84,25 +84,25 @@ Supply both coordinates or neither; south/west are negative. Zero is a valid coo
 Illustrative entries, not actual schedules. Minimal hand-written file:
 
 ```csv
-freq;time;station
-6070;0800-0900;Example Radio
-9670;1800-1900;Another Station
+freq;station;time
+6070;Example Radio;0800-0900
+9670;Another Station;1800-1900
 ```
 
 Recommended columns, including an overnight and an irregular broadcast:
 
 ```csv
-freq;time;days;from;to;mode;station;language;location;site;flags
-6000;;;;;AM;Example Station;;;;i
-7200;2300-0100;1234567;;;USB;Example Service;English;Australia;Sydney;
-9700;0900-1000;12345;2026-03-29;2026-10-25;AM;Example Radio;English;United Kingdom;Woofferton;
+freq;mode;station;language;time;days;from;to;location;site;flags
+6000;AM;Example Station;;;;;;;;i
+7200;USB;Example Service;English;2300-0100;1234567;;;Australia;Sydney;
+9700;AM;Example Radio;English;0900-1000;12345;2026-03-29;2026-10-25;United Kingdom;Woofferton;
 ```
 
 Single-date broadcast with inline transmitter data:
 
 ```csv
-freq;time;from;to;mode;station;language;location;site;lat;lon;power;azimuth
-9700;0900-1000;2026-10-25;2026-10-25;AM;Example Radio;English;United Kingdom;Woofferton;52.31667;-2.81667;100;ND
+freq;mode;station;language;time;from;to;location;site;lat;lon;power;azimuth
+9700;AM;Example Radio;English;0900-1000;2026-10-25;2026-10-25;United Kingdom;Woofferton;52.31667;-2.81667;100;ND
 ```
 
 Digital mode and combined flags:

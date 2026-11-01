@@ -60,13 +60,13 @@ class Broadcast(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
     freq: Annotated[Text, Field(min_length=1, max_length=11)]
+    mode: Annotated[Text, utf8_bytes(4)] = ""
+    station: Annotated[Text, Field(min_length=1), utf8_bytes(40)]
+    language: Text = ""
     time: Annotated[Text, Field(max_length=9)] = ""
     days: Annotated[Text, Field(pattern=r"^1?2?3?4?5?6?7?$")] = ""
     from_date: Annotated[Text, Field(max_length=10)] = Field("", alias="from")
     to_date: Annotated[Text, Field(max_length=10)] = Field("", alias="to")
-    mode: Annotated[Text, utf8_bytes(4)] = ""
-    station: Annotated[Text, Field(min_length=1), utf8_bytes(40)]
-    language: Text = ""
     location: Text = ""
     site: Text = ""
     lat: Annotated[Text, Field(max_length=12), coordinate(90)] = ""

@@ -128,6 +128,14 @@ def test_ordered_sets_reject_other_fields_characters(field, value):
         Broadcast.model_validate({"freq": "6000", "station": "Test", field: value})
 
 
+def test_default_export_column_order(schedule):
+    write(schedule, [Broadcast(freq="6000", station="Test")])
+    assert schedule.read_text().splitlines()[0] == (
+        "freq;mode;station;language;time;days;from;to;location;site;lat;lon;"
+        "power;azimuth;target;flags;notes"
+    )
+
+
 def test_full_row_round_trip(schedule):
     row = Broadcast.model_validate(
         {
