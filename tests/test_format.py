@@ -2,7 +2,25 @@ import pytest
 from pydantic import ValidationError
 
 from radio_schedules.cli import main
-from radio_schedules.format import COLUMNS, Broadcast, FormatError, read, write
+from radio_schedules.format import (
+    COLUMNS,
+    Broadcast,
+    FormatError,
+    read,
+    utf8_bytes,
+    write,
+)
+
+
+@pytest.mark.parametrize("value", ["", "abcd", "éé", "😀"])
+def test_utf8_bytes_accepts_values_within_limit(value):
+    assert utf8_bytes(4).func(value) == value
+
+
+@pytest.mark.parametrize("value", ["abcde", "ééa", "😀a"])
+def test_utf8_bytes_rejects_values_over_limit(value):
+    with pytest.raises(ValueError, match="must not exceed 4 UTF-8 bytes"):
+        utf8_bytes(4).func(value)
 
 
 @pytest.fixture
@@ -77,6 +95,39 @@ def test_invalid_fields(fields):
         Broadcast.model_validate({"freq": "6000", "station": "Test", **fields})
 
 
+@pytest.mark.parametrize("field", ["freq", "station"])
+@pytest.mark.parametrize("value", ["", "   "])
+def test_required_fields_reject_empty_values_after_trimming(field, value):
+    with pytest.raises(ValidationError) as exc:
+        Broadcast.model_validate({"freq": "6000", "station": "Test", field: value})
+    assert exc.value.errors()[0]["loc"] == (field,)
+    assert exc.value.errors()[0]["type"] == "too_short"
+
+
+@pytest.mark.parametrize("field", ["freq", "lat", "lon", "power", "azimuth"])
+@pytest.mark.parametrize("value", ["+1", "1e1", "١", ".1", "1.", "NaN"])
+def test_numeric_fields_reject_non_decimal_syntax(field, value):
+    fields = {"freq": "6000", "station": "Test", "lat": "0", "lon": "0"}
+    fields[field] = value
+    with pytest.raises(ValidationError):
+        Broadcast.model_validate(fields)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("days", ""), ("days", " 1357 "), ("flags", ""), ("flags", " i "), ("flags", "j")],
+)
+def test_ordered_sets_accept_valid_values(field, value):
+    row = Broadcast.model_validate({"freq": "6000", "station": "Test", field: value})
+    assert getattr(row, field) == value.strip(" ")
+
+
+@pytest.mark.parametrize("field,value", [("days", "ij"), ("flags", "17")])
+def test_ordered_sets_reject_other_fields_characters(field, value):
+    with pytest.raises(ValidationError):
+        Broadcast.model_validate({"freq": "6000", "station": "Test", field: value})
+
+
 def test_full_row_round_trip(schedule):
     row = Broadcast.model_validate(
         {
@@ -132,6 +183,7 @@ def test_reader_optional_columns_and_line_endings(schedule):
         b"freq;station\n7000;A\n6000;B",
         b"freq;station\n6000;\xff",
         b"freq;station\n6000;Test\r",
+        b"freq;station\r\n6000;Test\r\r\n",
         b"freq;station\r6000;Test",
         b'freq;station;extra\n6000;Test;"quoted"',
         b"freq;station\n# comment",
@@ -232,7 +284,7 @@ def test_maximum_length_boundaries_round_trip(schedule):
     ],
 )
 def test_column_length_limits(fields):
-    with pytest.raises(ValidationError, match="must not exceed"):
+    with pytest.raises(ValidationError):
         Broadcast.model_validate({"freq": "6000", "station": "Test", **fields})
 
 
@@ -252,7 +304,7 @@ def test_length_limits_apply_after_trimming(schedule):
 
 def test_reader_rejects_overlong_numeric_field(schedule):
     schedule.write_text("freq;station\n000006000.000;Test\n")
-    with pytest.raises(FormatError, match="must not exceed 11"):
+    with pytest.raises(FormatError, match="at most 11"):
         read(schedule)
 
 
@@ -271,9 +323,47 @@ def test_overlong_modes_are_rejected(schedule, mode):
 
 
 def test_station_limit_counts_utf8_bytes(schedule):
-    row = Broadcast(freq="6000", station="é" * 20)
+    row = Broadcast(freq="6000", station="  " + "é" * 20 + "  ")
+    assert row.station == "é" * 20
     write(schedule, [row])
     assert read(schedule) == [row]
     schedule.write_text("freq;station\n6000;" + "é" * 20 + "x\n")
     with pytest.raises(FormatError, match="must not exceed 40"):
         read(schedule)
+
+
+def test_writer_selected_columns(schedule):
+    rows = [
+        Broadcast(freq="7000", station="B", notes="omitted"),
+        Broadcast(freq="6000", station="A", from_date="2026-10-30"),
+    ]
+    write(schedule, rows, columns=("station", "from", "freq"))
+    assert schedule.read_text() == ("station;from;freq\nA;2026-10-30;6000\nB;;7000\n")
+    assert [row.station for row in read(schedule)] == ["A", "B"]
+    write(schedule, [], columns=("freq", "station"))
+    assert schedule.read_text() == "freq;station\n"
+
+
+@pytest.mark.parametrize(
+    "columns",
+    [
+        (),
+        ("freq",),
+        ("freq", "station", "unknown"),
+        ("freq", "station", "station"),
+        ("freq", "station", "lat"),
+    ],
+)
+def test_invalid_column_selection_preserves_file(schedule, columns):
+    schedule.write_text("original")
+    with pytest.raises(ValueError):
+        write(schedule, [], columns=columns)
+    assert schedule.read_text() == "original"
+
+
+def test_omitting_columns_does_not_bypass_row_validation(schedule):
+    schedule.write_text("original")
+    invalid = Broadcast.model_construct(freq="6000", station="A", time="bad")
+    with pytest.raises(ValidationError):
+        write(schedule, [invalid], columns=("freq", "station"))
+    assert schedule.read_text() == "original"
