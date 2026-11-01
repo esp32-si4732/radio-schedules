@@ -1,26 +1,31 @@
+from io import BytesIO
+
 import pytest
+from openpyxl import Workbook
 
 from radio_schedules import itu
-from radio_schedules.cli import main
 
 
-def page(rows, count=None, heading="Symbol"):
-    return (
-        f"<table><tr><th>{heading}</th><th><button>Designation</button></th></tr>"
-        + "".join(
-            "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
-            for row in rows
-        )
-        + f"</table>Number of symbols found = {len(rows) if count is None else count}"
-    ).encode()
+def workbook(rows, heading="Symbol", extra_sheet=False):
+    book = Workbook()
+    sheet = book.active
+    sheet.append((heading, "Designation"))
+    for row in rows:
+        sheet.append(row)
+    if extra_sheet:
+        book.create_sheet("Extra")
+    data = BytesIO()
+    book.save(data)
+    book.close()
+    return data.getvalue()
 
 
 def test_parse():
     assert itu.parse(
-        page(
+        workbook(
             [
                 ("D", " Germany "),
-                ("CG7", "Name &amp; <b>details</b>"),
+                ("CG7", "Name & details"),
                 ("CTI", "Côte d'Ivoire"),
             ]
         )
@@ -28,66 +33,95 @@ def test_parse():
 
 
 @pytest.mark.parametrize(
-    "data",
+    "rows,options,message",
     [
-        b"<html>Unavailable</html>",
-        page([]),
-        page([("D", "Germany")], count=2),
-        page([("D", "Germany")], heading="Code"),
-        page([("D", "")]),
-        page([("D", "Germany"), ("D", "Duplicate")]),
-        page([("bad", "Name")]),
-        page([("D", "Germany", "Extra")]),
-        page([("D", "Germany")]) + page([("F", "France")]),
-        page([("D", "Germany")]).replace(b"</table>", b""),
+        pytest.param([], {}, "empty geographical table", id="empty"),
+        pytest.param(
+            [("D", "Germany")],
+            {"heading": "Code"},
+            "row 1: unrecognized table headings",
+            id="headings",
+        ),
+        pytest.param([("D", "")], {}, "row 2: invalid table row", id="missing-name"),
+        pytest.param(
+            [("D", "Germany"), ("D", "Duplicate")],
+            {},
+            "row 3: duplicate code: D",
+            id="duplicate",
+        ),
+        pytest.param(
+            [("bad", "Name")], {}, "row 2: invalid table row", id="invalid-code"
+        ),
+        pytest.param(
+            [("D", "Germany", "Extra")],
+            {},
+            "row 1: unrecognized table headings",
+            id="extra-column",
+        ),
+        pytest.param(
+            [("D", "Germany")],
+            {"extra_sheet": True},
+            "expected one worksheet",
+            id="extra-sheet",
+        ),
+        pytest.param(
+            [(123, "Name")], {}, "row 2: invalid table row", id="numeric-code"
+        ),
+        pytest.param([("D", "   ")], {}, "row 2: invalid table row", id="blank-name"),
+        pytest.param(
+            [("D", "Germany"), ("F", 123)],
+            {},
+            "row 3: invalid table row",
+            id="numeric-name",
+        ),
     ],
 )
-def test_invalid_page(data):
-    with pytest.raises(ValueError):
+def test_invalid_workbook(rows, options, message):
+    data = workbook(rows, **options)
+    with pytest.raises(ValueError, match=message):
         itu.parse(data)
 
 
-def test_cli_comparison(monkeypatch, capsys):
-    monkeypatch.setattr(
-        itu,
-        "AREAS",
-        {"D": ("Germany", "Short Germany", "DE"), "F": ("France", "France", "FR")},
+@pytest.mark.parametrize("kind", ["html", "truncated"])
+def test_invalid_excel_file(kind):
+    data = (
+        b"<html>Unavailable</html>"
+        if kind == "html"
+        else workbook([("D", "Germany")])[:100]
     )
-    calls = []
-
-    def fetch(url):
-        calls.append(url)
-        return page([("F", "France"), ("D", "Germany")])
-
-    monkeypatch.setattr(itu, "fetch", fetch)
-    assert main(["check", "itu"]) == 0
-    assert "no differences (2 entries)" in capsys.readouterr().out
-    assert calls == [itu.URL]
-    monkeypatch.setattr(
-        itu, "fetch", lambda url: page([("D", "New name"), ("J", "Japan")])
-    )
-    assert main(["check", "itu"]) == 1
-    assert capsys.readouterr().out.splitlines() == [
-        "Changed D: Germany -> New name",
-        "Removed F: France",
-        "Added J: Japan",
-    ]
-    assert itu.AREAS == {
-        "D": ("Germany", "Short Germany", "DE"),
-        "F": ("France", "France", "FR"),
-    }
+    with pytest.raises(ValueError, match="ITU: invalid Excel export"):
+        itu.parse(data)
 
 
 @pytest.mark.parametrize(
-    "error", [OSError("download failed"), ValueError("invalid page")]
+    "rows,expected",
+    [
+        pytest.param([("F", "France"), ("D", "Germany")], [], id="unchanged-reordered"),
+        pytest.param(
+            [("J", "Japan"), ("D", "New name")],
+            ["Changed D: Germany -> New name", "Removed F: France", "Added J: Japan"],
+            id="added-removed-changed",
+        ),
+    ],
 )
-def test_cli_error(monkeypatch, capsys, error):
-    def fetch(url):
-        raise error
+def test_check(monkeypatch, capsys, rows, expected):
+    original = {
+        "D": ("Germany", "Short Germany", "DE"),
+        "F": ("France", "France", "FR"),
+    }
+    monkeypatch.setattr(itu, "AREAS", original.copy())
+    response = workbook(rows)
+    calls = []
+
+    def fetch(url, *, data=None):
+        calls.append((url, data))
+        return response
 
     monkeypatch.setattr(itu, "fetch", fetch)
-    assert main(["check", "itu"]) == 1
-    assert str(error) in capsys.readouterr().err
+    assert itu.check() == expected
+    assert calls == [(itu.URL, b"viewCommand=Excel")]
+    assert itu.AREAS == original
+    assert capsys.readouterr() == ("", "")
 
 
 def test_short_names_preserve_distinctions():
@@ -168,10 +202,3 @@ def test_area_and_parent_codes():
         "XSD",
         "XSP",
     }
-
-
-def test_check_returns_differences_without_printing(monkeypatch, capsys):
-    monkeypatch.setattr(itu, "AREAS", {"D": ("Germany", "Germany", "DE")})
-    monkeypatch.setattr(itu, "fetch", lambda url: page([("D", "New name")]))
-    assert itu.check() == ["Changed D: Germany -> New name"]
-    assert capsys.readouterr() == ("", "")

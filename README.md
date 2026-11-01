@@ -32,9 +32,9 @@ Validation accepts UTF-8 with or without an initial BOM and LF or CRLF line endi
 uv run rsked check itu
 ```
 
-Downloads the current ITU geographical table and compares codes and official names with the bundled mapping. Reports added, removed, and renamed entries without modifying the snapshot. Short names, ISO associations, and Aoki-specific overrides are maintained locally and excluded from the comparison.
+Downloads the official ITU geographical table as an Excel workbook and compares codes and official names with the bundled mapping. Reports added, removed, and renamed entries without modifying the snapshot. Short names, ISO associations, and Aoki-specific overrides are maintained locally and excluded from the comparison.
 
-Exit status is 0 when identical, 1 for differences or a download/parsing error. This command needs no cache and can run periodically in CI. Unexpected headings, duplicate codes, or a mismatch with the published row count cause an error.
+Exit status is 0 when identical, 1 for differences or a download/parsing error. This command needs no cache and can run periodically in CI. Unexpected worksheet structure or headings, empty tables, malformed rows, and duplicate codes cause an error.
 
 ## Development checks
 

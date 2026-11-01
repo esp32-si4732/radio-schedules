@@ -9,9 +9,9 @@ from urllib.request import Request, urlopen
 USER_AGENT = "radio-schedules (+https://github.com/esp32-si4732/radio-schedules)"
 
 
-def fetch(url):
+def fetch(url, *, data=None):
     try:
-        request = Request(url, headers={"User-Agent": USER_AGENT})
+        request = Request(url, data=data, headers={"User-Agent": USER_AGENT})
         with urlopen(request, timeout=30) as response:
             return response.read()
     except (OSError, HTTPException) as exc:

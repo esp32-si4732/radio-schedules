@@ -1,7 +1,12 @@
 """ITU geographical designations, retrieved 2026-10-24."""
 
 import re
-from html.parser import HTMLParser
+from contextlib import closing
+from io import BytesIO
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
+
+from openpyxl import load_workbook
 
 from .utils import fetch
 
@@ -327,70 +332,36 @@ AREAS = {
 
 
 def parse(data):
-    """Read the published table, checking its headings and declared row count."""
-
-    class Tables(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self.tables = []
-            self.table = None
-            self.row = None
-            self.cell = None
-            self.page_text = []
-
-        def handle_starttag(self, tag, attrs):
-            if tag == "table":
-                self.table = []
-            elif tag == "tr" and self.table is not None:
-                self.row = []
-            elif tag in {"td", "th"} and self.row is not None:
-                self.cell = []
-
-        def handle_data(self, value):
-            self.page_text.append(value)
-            if self.cell is not None:
-                self.cell.append(value)
-
-        def handle_endtag(self, tag):
-            if tag in {"td", "th"} and self.cell is not None:
-                self.row.append(" ".join("".join(self.cell).split()))
-                self.cell = None
-            elif tag == "tr" and self.row is not None:
-                self.table.append(self.row)
-                self.row = None
-            elif tag == "table" and self.table is not None:
-                self.tables.append(self.table)
-                self.table = None
-
-    parser = Tables()
-    parser.feed(data.decode("utf-8-sig"))
-    parser.close()
-    tables = [t for t in parser.tables if t and t[0] == ["Symbol", "Designation"]]
-    counts = re.findall(
-        r"Number of symbols found\s*=\s*([0-9]+)", " ".join(parser.page_text)
-    )
-    if len(tables) != 1 or len(counts) != 1:
-        raise ValueError("ITU: unrecognized table headings or row count")
-    areas = {}
-    for row in tables[0][1:]:
-        if (
-            len(row) != 2
-            or not re.fullmatch(r"[A-Z][A-Z0-9]{0,2}", row[0])
-            or not row[1]
-        ):
-            raise ValueError(f"ITU: invalid table row: {row}")
-        code, name = row
-        if code in areas:
-            raise ValueError(f"ITU: duplicate code: {code}")
-        areas[code] = name
-    if not areas or len(areas) != int(counts[0]):
-        raise ValueError("ITU: table does not match the published row count")
-    return areas
+    """Read the official Excel export, checking its structure and unique codes."""
+    try:
+        with closing(
+            load_workbook(BytesIO(data), read_only=True, data_only=True)
+        ) as book:
+            if len(book.worksheets) != 1:
+                raise ValueError("ITU: expected one worksheet")
+            rows = book.worksheets[0].values
+            if next(rows, None) != ("Symbol", "Designation"):
+                raise ValueError("ITU:row 1: unrecognized table headings")
+            areas = {}
+            for number, row in enumerate(rows, 2):
+                if len(row) != 2 or not all(isinstance(v, str) for v in row):
+                    raise ValueError(f"ITU:row {number}: invalid table row: {row}")
+                code, name = (" ".join(v.split()) for v in row)
+                if not re.fullmatch(r"[A-Z][A-Z0-9]{0,2}", code) or not name:
+                    raise ValueError(f"ITU:row {number}: invalid table row: {row}")
+                if code in areas:
+                    raise ValueError(f"ITU:row {number}: duplicate code: {code}")
+                areas[code] = name
+            if not areas:
+                raise ValueError("ITU: empty geographical table")
+            return areas
+    except (BadZipFile, KeyError, ParseError) as exc:
+        raise ValueError(f"ITU: invalid Excel export: {exc}") from exc
 
 
 def check():
     """Return upstream differences without modifying the bundled snapshot."""
-    current = parse(fetch(URL))
+    current = parse(fetch(URL, data=b"viewCommand=Excel"))
     changes = []
     for code in sorted(AREAS.keys() | current.keys()):
         if code not in AREAS:

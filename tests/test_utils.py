@@ -9,15 +9,18 @@ from radio_schedules import utils
 from radio_schedules.utils import write_bytes
 
 
-def test_fetch(monkeypatch):
+@pytest.mark.parametrize("data", [None, b"viewCommand=Excel"])
+def test_fetch(monkeypatch, data):
     def urlopen(request, timeout):
         assert request.full_url == "https://example.com/table"
         assert request.get_header("User-agent") == utils.USER_AGENT
+        assert request.data == data
+        assert request.get_method() == ("GET" if data is None else "POST")
         assert timeout == 30
         return BytesIO(b"source data")
 
     monkeypatch.setattr(utils, "urlopen", urlopen)
-    assert utils.fetch("https://example.com/table") == b"source data"
+    assert utils.fetch("https://example.com/table", data=data) == b"source data"
 
 
 @pytest.mark.parametrize("error", [URLError("unavailable"), IncompleteRead(b"", 10)])
