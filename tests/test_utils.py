@@ -9,6 +9,53 @@ from radio_schedules import utils
 from radio_schedules.utils import write_bytes
 
 
+def test_format_validation_errors():
+    from pydantic import ValidationError
+
+    from radio_schedules.format import Broadcast
+
+    with pytest.raises(ValidationError) as exc:
+        Broadcast(freq="0", station="Test", power="0")
+    assert utils.format_error(exc.value) == (
+        "freq: frequency must be an integer Hz in 1..4294967295 "
+        "[type=value_error, input_value='0', input_type=str]; "
+        "power: power must be positive [type=value_error, input_value='0', input_type=str]"
+    )
+
+
+def test_format_model_error():
+    from pydantic import ValidationError
+
+    from radio_schedules.format import Broadcast
+
+    with pytest.raises(ValidationError) as exc:
+        Broadcast(freq="6000", station="Test", lat="0")
+    message = utils.format_error(exc.value)
+    assert message.startswith(
+        "supply both coordinates or neither [type=value_error, input_value="
+    )
+    assert "'lat': '0'" in message
+    assert message.endswith("input_type=dict]")
+    assert "https://errors.pydantic.dev" not in message
+
+
+def test_format_wrong_input_type():
+    from pydantic import ValidationError
+
+    from radio_schedules.format import Broadcast
+
+    with pytest.raises(ValidationError) as exc:
+        Broadcast(freq=6000, station="Test")
+    assert utils.format_error(exc.value) == (
+        "freq: Input should be a valid string "
+        "[type=string_type, input_value=6000, input_type=int]"
+    )
+
+
+def test_format_plain_error():
+    assert utils.format_error(ValueError("invalid header")) == "invalid header"
+
+
 @pytest.mark.parametrize("data", [None, b"viewCommand=Excel"])
 def test_fetch(monkeypatch, data):
     def urlopen(request, timeout):

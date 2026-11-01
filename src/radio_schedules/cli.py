@@ -5,6 +5,7 @@ import sys
 
 from . import itu
 from .format import read
+from .utils import format_error
 
 
 def main(argv=None):
@@ -37,5 +38,5 @@ def main(argv=None):
         )
         return int(bool(changes))
     except (OSError, ValueError) as exc:
-        print(exc, file=sys.stderr)
+        print(format_error(exc), file=sys.stderr)
         return 1

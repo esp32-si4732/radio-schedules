@@ -16,7 +16,7 @@ from pydantic import (
     model_validator,
 )
 
-from .utils import write_bytes
+from .utils import format_error, write_bytes
 
 
 def clean_text(value: str) -> str:
@@ -218,7 +218,7 @@ def read(path: str | Path) -> list[Broadcast]:
                 previous = row.frequency_hz
                 rows.append(row)
             except ValueError as exc:
-                raise FormatError(f"{path}:{line_number}: {exc}") from exc
+                raise FormatError(f"{path}:{line_number}: {format_error(exc)}") from exc
     if header is None:
         raise FormatError(f"{path}: missing header")
     return rows

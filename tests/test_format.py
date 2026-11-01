@@ -308,6 +308,17 @@ def test_reader_rejects_overlong_numeric_field(schedule):
         read(schedule)
 
 
+def test_reader_formats_validation_errors_with_line_context(schedule):
+    schedule.write_text("freq;station;power\n0;Test;0\n")
+    with pytest.raises(FormatError) as exc:
+        read(schedule)
+    assert str(exc.value) == (
+        f"{schedule}:2: freq: frequency must be an integer Hz in 1..4294967295 "
+        "[type=value_error, input_value='0', input_type=str]; "
+        "power: power must be positive [type=value_error, input_value='0', input_type=str]"
+    )
+
+
 @pytest.mark.parametrize("mode", ["HFDL", "QPSK", "PWPM", "TEST"])
 def test_four_byte_modes_round_trip(schedule, mode):
     row = Broadcast(freq="6000", station="Test", mode=mode)
