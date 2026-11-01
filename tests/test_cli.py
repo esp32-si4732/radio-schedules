@@ -6,11 +6,20 @@ from radio_schedules.cli import main
 @pytest.mark.parametrize(
     "changes", [[], ["Changed D: Germany -> New name", "Added J: Japan"]]
 )
-def test_check_itu_output(monkeypatch, capsys, changes):
+@pytest.mark.parametrize("refresh", [False, True])
+def test_check_itu_output(monkeypatch, capsys, changes, refresh):
     from radio_schedules import itu
 
-    monkeypatch.setattr(itu, "check", lambda: changes)
-    assert main(["check", "itu"]) == int(bool(changes))
+    def check(path, *, refresh=False):
+        calls.append((path, refresh))
+        return changes
+
+    calls = []
+    monkeypatch.setattr(itu, "check", check)
+    assert main(
+        ["check", "itu", "itu.xlsx", *(["--refresh"] if refresh else [])]
+    ) == int(bool(changes))
+    assert calls == [("itu.xlsx", refresh)]
     expected = (
         "\n".join(changes)
         if changes
@@ -25,9 +34,9 @@ def test_check_itu_output(monkeypatch, capsys, changes):
 def test_check_itu_error(monkeypatch, capsys, error):
     from radio_schedules import itu
 
-    def check():
+    def check(path, *, refresh=False):
         raise error
 
     monkeypatch.setattr(itu, "check", check)
-    assert main(["check", "itu"]) == 1
+    assert main(["check", "itu", "itu.xlsx"]) == 1
     assert capsys.readouterr() == ("", str(error) + "\n")

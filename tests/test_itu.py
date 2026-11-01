@@ -104,7 +104,7 @@ def test_invalid_excel_file(kind):
         ),
     ],
 )
-def test_check(monkeypatch, capsys, rows, expected):
+def test_check(tmp_path, monkeypatch, capsys, rows, expected):
     original = {
         "D": ("Germany", "Short Germany", "DE"),
         "F": ("France", "France", "FR"),
@@ -118,7 +118,7 @@ def test_check(monkeypatch, capsys, rows, expected):
         return response
 
     monkeypatch.setattr(itu, "fetch", fetch)
-    assert itu.check() == expected
+    assert itu.check(tmp_path / "itu.xlsx") == expected
     assert calls == [(itu.URL, b"viewCommand=Excel")]
     assert itu.AREAS == original
     assert capsys.readouterr() == ("", "")
@@ -202,3 +202,52 @@ def test_area_and_parent_codes():
         "XSD",
         "XSP",
     }
+
+
+def test_local_input_is_reused_offline(tmp_path, monkeypatch):
+    path = tmp_path / "itu.xlsx"
+    data = workbook([("D", "Germany")])
+    path.write_bytes(data)
+
+    def fetch(*args, **kwargs):
+        pytest.fail("local input must not trigger a download")
+
+    monkeypatch.setattr(itu, "fetch", fetch)
+    assert itu.prepare_input(path) == {"D": "Germany"}
+    path.write_bytes(b"invalid local workbook")
+    with pytest.raises(ValueError, match="invalid Excel export"):
+        itu.prepare_input(path)
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+def test_download_saves_valid_workbook(tmp_path, monkeypatch, refresh):
+    path = tmp_path / "inputs" / "itu.xlsx"
+    if refresh:
+        path.parent.mkdir()
+        path.write_bytes(workbook([("D", "Old name")]))
+    data = workbook([("D", "Germany")])
+    monkeypatch.setattr(itu, "fetch", lambda *args, **kwargs: data)
+    assert itu.prepare_input(path, refresh=refresh) == {"D": "Germany"}
+    assert path.read_bytes() == data
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("failure", ["download", "parse"])
+def test_failed_download_preserves_local_file(tmp_path, monkeypatch, existing, failure):
+    path = tmp_path / "itu.xlsx"
+    original = workbook([("D", "Germany")])
+    if existing:
+        path.write_bytes(original)
+
+    def fetch(*args, **kwargs):
+        if failure == "download":
+            raise OSError("download failed")
+        return b"invalid workbook"
+
+    monkeypatch.setattr(itu, "fetch", fetch)
+    with pytest.raises((OSError, ValueError)):
+        itu.prepare_input(path, refresh=existing)
+    if existing:
+        assert path.read_bytes() == original
+    else:
+        assert not path.exists()

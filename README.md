@@ -29,12 +29,12 @@ Validation accepts UTF-8 with or without an initial BOM and LF or CRLF line endi
 ## Check ITU names for changes
 
 ```sh
-uv run rsked check itu
+uv run rsked check itu inputs/itu.xlsx --refresh
 ```
 
-Downloads the official ITU geographical table as an Excel workbook and compares codes and official names with the bundled mapping. Reports added, removed, and renamed entries without modifying the snapshot. Short names, ISO associations, and Aoki-specific overrides are maintained locally and excluded from the comparison.
+Downloads the official ITU geographical table as an Excel workbook if the supplied input path is missing; otherwise reuses the local file. Use `--refresh` to download a fresh copy. Downloads are validated before being saved atomically; failed downloads or parsing leave existing files untouched. Compares codes and official names with the bundled mapping. Reports added, removed, and renamed entries without modifying the snapshot. Short names, ISO associations, and Aoki-specific overrides are maintained locally and excluded from the comparison.
 
-Exit status is 0 when identical, 1 for differences or a download/parsing error. This command needs no cache and can run periodically in CI. Unexpected worksheet structure or headings, empty tables, malformed rows, and duplicate codes cause an error.
+Exit status is 0 when identical, 1 for differences or a download/parsing error. Existing inputs support offline checks. Use `--refresh` in periodic CI jobs to check the latest upstream data. Unexpected worksheet structure or headings, empty tables, malformed rows, and duplicate codes cause an error.
 
 ## Development checks
 

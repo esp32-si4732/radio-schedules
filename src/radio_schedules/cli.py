@@ -12,8 +12,14 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("check", help="check source definitions")
     checks = check.add_subparsers(dest="source", required=True)
-    checks.add_parser(
-        "itu", help="compare bundled ITU names with the current online table"
+    itu_check = checks.add_parser(
+        "itu", help="compare bundled ITU names with an Excel table"
+    )
+    itu_check.add_argument("input", help="local Excel file; downloaded if missing")
+    itu_check.add_argument(
+        "--refresh",
+        action="store_true",
+        help="download a fresh table, replacing the local input",
     )
     validate = commands.add_parser("validate", help="validate a schedule CSV file")
     validate.add_argument("file")
@@ -23,7 +29,7 @@ def main(argv=None):
             rows = read(args.file)
             print(f"{args.file}: valid ({len(rows)} rows)")
             return 0
-        changes = itu.check()
+        changes = itu.check(args.input, refresh=args.refresh)
         print(
             "\n".join(changes)
             if changes

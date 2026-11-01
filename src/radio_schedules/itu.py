@@ -3,12 +3,13 @@
 import re
 from contextlib import closing
 from io import BytesIO
+from pathlib import Path
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
 from openpyxl import load_workbook
 
-from .utils import fetch
+from .utils import fetch, write_bytes
 
 URL = "https://www.itu.int/gladapp/GeographicalArea/List"
 
@@ -359,9 +360,19 @@ def parse(data):
         raise ValueError(f"ITU: invalid Excel export: {exc}") from exc
 
 
-def check():
+def prepare_input(path, *, refresh=False):
+    path = Path(path)
+    if path.exists() and not refresh:
+        return parse(path.read_bytes())
+    data = fetch(URL, data=b"viewCommand=Excel")
+    areas = parse(data)
+    write_bytes(path, data, overwrite=refresh)
+    return areas
+
+
+def check(path, *, refresh=False):
     """Return upstream differences without modifying the bundled snapshot."""
-    current = parse(fetch(URL, data=b"viewCommand=Excel"))
+    current = prepare_input(path, refresh=refresh)
     changes = []
     for code in sorted(AREAS.keys() | current.keys()):
         if code not in AREAS:
