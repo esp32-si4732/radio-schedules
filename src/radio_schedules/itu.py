@@ -7,6 +7,7 @@ from pathlib import Path
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
+import pycountry
 from openpyxl import load_workbook
 
 from .utils import fetch, write_bytes
@@ -17,7 +18,7 @@ URL = "https://www.itu.int/gladapp/GeographicalArea/List"
 # Prefer the applicable ISO area/territory code; otherwise use the parent country.
 # Multiple possibilities use a list: disputed claims or a historical area spanning countries.
 # CG7 maps geographically to Cuba despite its USA-station designation.
-# ISO assignments checked against pycountry iso3166-1.json on 2026-10-25.
+# ISO code validity is checked by `rsked check itu` using pycountry.
 AREAS = {
     "ABW": ("Aruba", "Aruba", "AW"),
     "AFG": ("Afghanistan", "Afghanistan", "AF"),
@@ -371,7 +372,7 @@ def prepare_input(path, *, refresh=False):
 
 
 def check(path, *, refresh=False):
-    """Return upstream differences without modifying the bundled snapshot."""
+    """Return upstream differences and invalid ISO mappings without modifying them."""
     current = prepare_input(path, refresh=refresh)
     changes = []
     for code in sorted(AREAS.keys() | current.keys()):
@@ -381,4 +382,16 @@ def check(path, *, refresh=False):
             changes.append(f"Removed {code}: {AREAS[code][0]}")
         elif AREAS[code][0] != current[code]:
             changes.append(f"Changed {code}: {AREAS[code][0]} -> {current[code]}")
+    for area, (_, _, codes) in sorted(AREAS.items()):
+        codes = codes if isinstance(codes, list) else [codes]
+        if not codes:
+            changes.append(f"Invalid ISO mapping {area}: empty code list")
+        if len(codes) != len(set(codes)):
+            changes.append(f"Invalid ISO mapping {area}: duplicate codes")
+        for code in codes:
+            if (
+                not re.fullmatch(r"[A-Z]{2}", code)
+                or pycountry.countries.get(alpha_2=code) is None
+            ):
+                changes.append(f"Invalid ISO mapping {area}: {code!r}")
     return changes

@@ -124,6 +124,36 @@ def test_check(tmp_path, monkeypatch, capsys, rows, expected):
     assert capsys.readouterr() == ("", "")
 
 
+@pytest.mark.parametrize(
+    "codes,expected",
+    [
+        ("DE", []),
+        (["SD", "SS"], []),
+        ("ZZ", ["Invalid ISO mapping D: 'ZZ'"]),
+        ("de", ["Invalid ISO mapping D: 'de'"]),
+        ("DEU", ["Invalid ISO mapping D: 'DEU'"]),
+        ("", ["Invalid ISO mapping D: ''"]),
+        (["DE", "ZZ"], ["Invalid ISO mapping D: 'ZZ'"]),
+        ([], ["Invalid ISO mapping D: empty code list"]),
+        (["DE", "DE"], ["Invalid ISO mapping D: duplicate codes"]),
+    ],
+)
+def test_check_iso_codes(tmp_path, monkeypatch, codes, expected):
+    from radio_schedules.cli import main
+
+    monkeypatch.setattr(itu, "AREAS", {"D": ("Germany", "Germany", codes)})
+    path = tmp_path / "itu.xlsx"
+    path.write_bytes(workbook([("D", "Germany")]))
+    assert itu.check(path) == expected
+    assert main(["check", "itu", str(path)]) == int(bool(expected))
+
+
+def test_check_bundled_iso_codes(tmp_path):
+    path = tmp_path / "itu.xlsx"
+    path.write_bytes(workbook([(code, names[0]) for code, names in itu.AREAS.items()]))
+    assert itu.check(path) == []
+
+
 def test_short_names_preserve_distinctions():
     assert itu.AREAS["D"] == ("Germany (Federal Republic of)", "Germany", "DE")
     for code in ("CHR", "BIO", "ICO", "FLK", "SXM", "GCA", "GCC"):

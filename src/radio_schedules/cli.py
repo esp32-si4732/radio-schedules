@@ -14,7 +14,7 @@ def main(argv=None):
     check = commands.add_parser("check", help="check source definitions")
     checks = check.add_subparsers(dest="source", required=True)
     itu_check = checks.add_parser(
-        "itu", help="compare bundled ITU names with an Excel table"
+        "itu", help="compare ITU names with an Excel table and validate ISO codes"
     )
     itu_check.add_argument("input", help="local Excel file; downloaded if missing")
     itu_check.add_argument(
